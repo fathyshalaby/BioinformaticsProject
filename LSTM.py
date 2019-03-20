@@ -140,17 +140,6 @@ print('Finished Training')
 
 ##############################################
 
-        # 2. Log values and gradients of the parameters (histogram summary)
-
-
-
-
-'''dataiter = iter(testloader)
-sample = dataiter.__next__()
-images, labels = sample["Sequence"], sample["GoID"]
-outputs = net(images)
-
-predicted = outputs'''
 
 correct = 0
 total = 0
