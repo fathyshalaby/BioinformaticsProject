@@ -12,8 +12,7 @@ from sklearn.metrics import accuracy_score
 from sklearn.metrics import balanced_accuracy_score
 from sklearn.metrics import f1_score
 from sklearn.metrics import roc_auc_score
-from sklearn.metrics import confusion_matrix
-
+from preprocessing import PadToEqualLengths
 
 #split unref file into 3 files
 
@@ -72,18 +71,16 @@ class TensorDataset(Dataset):
         sequence = self.SEQUENCE[uniprodid]#works but give key error will be solved when do it on full files
         x = np.zeros(shape=(len(sequence), len(self.aa_lookup)), dtype=np.float32)
         x[np.arange(len(sequence)), [self.aa_lookup[aa] for aa in sequence]] = 1
-        sample = {'GoID': label, 'UniprotID': uniprodid, 'Sequence': x}
-        return sample
+        return label,uniprodid,x
 
 trainset = TensorDataset(annotation,train_sequences,gid,ggidt)
 testset = TensorDataset(annotation,test_sequences,gid,ggidt)
+seq_padding = PadToEqualLengths(padding_dims=(None, None, 1), padding_values=(None, None, 0))
+trainloader = torch.utils.data.DataLoader(trainset, batch_size=8,
+                                          shuffle=True, num_workers=2,collate_fn=seq_padding.pad_collate_fn)
 
-trainloader = torch.utils.data.DataLoader(trainset, batch_size=1,
-                                          shuffle=True, num_workers=2)
-
-
-testloader = torch.utils.data.DataLoader(testset, batch_size=1,
-                                         shuffle=False, num_workers=2)
+testloader = torch.utils.data.DataLoader(testset, batch_size=16,
+                                         shuffle=False, num_workers=2,collate_fn=seq_padding.pad_collate_fn)
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -125,10 +122,10 @@ while update <= n_updates:
     running_loss = 0.0
     n_samples = 0
     for data in trainloader:
-        n_samples += len(data["Sequence"])
+        labels, uniprodid, inputs_padded = data
+        inputs, orig_lens = inputs_padded
+        n_samples += len(inputs)
         print("n_samples {}".format(n_samples))
-        # get the inputs
-        inputs, labels = data["Sequence"], data["GoID"]
 
         # zero the parameter gradients
         optimizer.zero_grad()
@@ -173,20 +170,22 @@ correct = 0
 total = 0
 tlist = []
 plist = []
-with torch.no_grad():
+with torch.no_grad():#roc score
     for data in testloader:
-        images, labels = data["Sequence"], data["GoID"]
-        outputs = net(images)
+        labels, uniprodid, inputs_padded = data
+        inputs, orig_lens = inputs_padded
+        outputs = net(inputs)
         predicted = torch.sigmoid(outputs).data
         tlist.append(labels)
         plist.append(predicted)
     testlabels = np.concatenate(tlist,axis=0)
     predicts = np.concatenate(plist,axis=0)
-    ba = balanced_accuracy_score(testlabels[:,0], predicts[:,0].round())
-    f1 = f1_score(testlabels[:,0], predicts[:,0].round())
-    try:
-        roc = roc_auc_score(testlabels[:,0], predicts[:,0])
-    except ValueError:
-        roc = np.nan
-    print('balanced accuracy score: '+str(ba)+'\n'+'F1 score: '+str(f1)+'\n'+'Roc-auc score score: '+str(roc))# cross validation needed, have a seperate validation set
+    for c in range(labels.shape[1]):
+        ba = balanced_accuracy_score(testlabels[:,c], predicts[:,c].round())
+        f1 = f1_score(testlabels[:,c], predicts[:,c].round())
+        try:
+            roc = roc_auc_score(testlabels[:,c], predicts[:,c])
+        except ValueError:
+            roc = np.nan
+        print(str(c)+'balanced accuracy score: '+str(ba)+'\n'+'F1 score: '+str(f1)+'\n'+'Roc-auc score score: '+str(roc))# cross validation needed, have a seperate validation set
 
