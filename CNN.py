@@ -114,7 +114,7 @@ optimizer = optim.Adam(net.parameters(), lr=0.001, weight_decay=1e-5)#it uses ad
 
 
 
-n_updates = 10
+n_updates = 1000
 update = 0
 running_losslist = []
 
@@ -138,16 +138,15 @@ while update <= n_updates:
 
         # print statistics
         running_loss += loss.item()
-        running_losslist.append(running_loss/100)
+        running_losslist.append(running_loss/1000)
         if update % 100:    # print every 2000 mini-batches
             print('[%7d] loss: %.8f' %
-                  (update, running_loss / 100))
+                  (update, running_loss / 1000))
             running_loss = 0.0
         if update > n_updates:
             break
 
 with open('stats.txt','w') as dar:
-    dar.write('\t --------Running Loss-------\t\n')
     for k in running_losslist:
         dar.write(str(k)+'\n')
 print('Finished Training')
@@ -170,6 +169,8 @@ correct = 0
 total = 0
 tlist = []
 plist = []
+roc_list = []
+ba_list = []
 with torch.no_grad():#roc score
     for data in testloader:
         labels, uniprodid, inputs_padded = data
@@ -182,10 +183,18 @@ with torch.no_grad():#roc score
     predicts = np.concatenate(plist,axis=0)
     for c in range(labels.shape[1]):
         ba = balanced_accuracy_score(testlabels[:,c], predicts[:,c].round())
-        f1 = f1_score(testlabels[:,c], predicts[:,c].round())
+        ba_list.append(ba)
         try:
             roc = roc_auc_score(testlabels[:,c], predicts[:,c])
+            roc_list.append(roc)
         except ValueError:
             roc = np.nan
-        print(str(c)+'balanced accuracy score: '+str(ba)+'\n'+'F1 score: '+str(f1)+'\n'+'Roc-auc score score: '+str(roc))# cross validation needed, have a seperate validation set
-
+        print(str(c)+'balanced accuracy score: '+str(ba)+'\n'+'Roc-auc score score: '+str(roc))# cross validation needed, have a seperate validation set
+        with open('roc_stats.txt','w') as dar:
+            for k in roc_list:
+                dar.write(str(k)+'\n')
+        print('Finished Training')
+        with open('ba_stats.txt','w') as dar:
+            for k in ba_list:
+                dar.write(str(k)+'\n')
+        print('Finished Training')
